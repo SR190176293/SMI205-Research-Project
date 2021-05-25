@@ -1,0 +1,474 @@
+---
+title: "SMI205 Replication Project"
+author: '190176293'
+date: "24/05/2021"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Effects of Economic Inequality on Protest Participation: A Replication Project
+
+### Rpubs link: [https://rpubs.com/SR190176293/773828]
+
+
+## Replicated paper
+Kołczyńska, M. (2020). _Changes or Cross‐National Differences? Effects of Economic Inequality on Protest Participation._ Social Science Quarterly, 101: 256-268. [link] https://doi.org/10.1111/ssqu.12731 
+
+## Workspace setup
+
+```{r warning=FALSE, results='hide', message=FALSE}
+library(rlang)
+library(essurvey) # for importing ESS data
+library(rio) # for importing and exporting data to different formats
+
+library(plyr) # for manipulating data
+library(sjlabelled) # for dealing with data labels
+library(countrycode) # for converting between country codes
+library(stargazer) # for printing model tables
+
+library(WDI) # for downloading data from the World Bank's World Development Indicators
+library(lme4) # for estimating multi-level models
+library(ggeffects) # for calculating and plotting marginal effects
+library(interactions) # for probing interactions
+
+library(tidyverse) # for manipulating data
+library(dplyr)
+library(questionr)
+library(rcompanion)
+library(sjPlot)
+library(sjmisc)
+library(car)
+```
+
+
+## 1. Introduction
+
+**400 words**
+
+Marta Kołczynska’s paper investigates the relationship between economic inequality and its effects on protest participation across Europe, spanning from 2001 to 2016. Data is taken from the European Social Survey (waves 1-8), using 181 national surveys and a multilevel logit model to separate effects of within-country changes and cross-country differences in inequality on protest participation.
+
+Although this relationship has been theorised many times before (see Kurer et al., 2019; Schoene and Allaway, 2019; Solt, 2015; Vassallo, 2019), Kołczynska identified that existing research failed to study longitudinal effects of changes in economic inequality, and instead blended results from cross-national and intra-national data. By separating this, Kołczynska found that most protest participation was derived from cross-national differences in equality, rather than within-country changes over time. The failure to find any remarkable evidence in favour of longitudinal effects meant the data did not support any existing theories regarding the relationship, including resource theory (Powell, 1982), relative power theory (Goodin and Dryzek, 1980) or relative deprivation theory (Gurr, 1970). 
+
+The paper was important in extending existing research regarding the relationship between economic inequality and protest participation. Various evidence suggests Europe has seen a significant rise in anti-austerity movements in the last decade, and in light of the recent COVID-19 pandemic, this is likely to increase (Schoene and Allaway, 2019). In a bid to increase societal stability and aid government, an investigation into the characteristics of what causes protest and why is necessary. 
+
+However, Kołczynska’s paper doesn’t go far enough in investigating whether economic inequality is a primary driver of protest participation. While the use of objective measures in data does undeniably solidify findings empirically, the hypothesis made by Kurer et al. (2019) that social movement literature may help to explain why people protest is overlooked. Subjective measures of a population are just as important as objective measures because they quantify opinions which ultimately drive behaviour; in the context of political protest, these opinions are essential. In addition, while the use of petitions and demonstrations is perfectly suitable, Kołczynska excludes several suitable measures of further protest activity, including boycotts of products. While some would argue this lacks the same relevance to government as the other two forms, it is still an indirect method of expressing distaste for a government regime, an example being the boycott of companies from South Africa during apartheid in the 1980’s (Drewett, 2006; Kurer et al., 2019).
+
+This paper will therefore be exploring the robustness of the original study. Although the purpose of this is often to challenge p-hacking, the findings in the original study were insignificant, so the purpose here is to retry with new variables (Freese and Peterson, 2017).  
+
+
+## 2. Data and methods
+
+### 2.1. Data
+
+```{r warning=FALSE, results='hide', message=FALSE}
+ set_email("gdavies5@sheffield.ac.uk") # login email to the ESS data
+ 
+ ess_all <- import_rounds(1:8)
+ ess_small <- list()
+ 
+ basic <- c("idno", "cntry", "essround", "pspwght", "agea", "gndr", "eduyrs",
+            "domicil", "mbtru", "mnactic", "health")
+part_vars <- c("sgnptit", "pbldmn", "bctprd")
+ 
+ 
+for (i in 1:8) {
+   ess_small[[i]] <- ess_all[[i]] %>% select(basic, part_vars, starts_with("hinctnt"),
+                                            starts_with("inwy"))
+ }
+ 
+ ess_merge <- plyr::ldply(ess_small, rbind)
+
+ 
+# ## 1.3. Extra data from single-country survey files ----------
+ ess_extra <- list()
+ ess_extra[["bg4"]] <- rio::import("ESS4csBG.por") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 4)
+ ess_extra[["cy4"]] <- rio::import("ESS4csCY.por") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 4)
+ ess_extra[["es6"]] <- rio::import("ESS6csES.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 6)
+ ess_extra[["fr2"]] <- rio::import("ESS2csFR.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 2)
+ ess_extra[["ie1"]] <- rio::import("ESS1csIE.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 1)
+ ess_extra[["pt5"]] <- rio::import("ESS5csPT.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 5)
+ ess_extra[["ro3"]] <- rio::import("ESS3csRO.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 3)
+ ess_extra[["sk4"]] <- rio::import("ESS4csSK.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 4)
+ 
+ ess_extra[["ee2"]] <- rio::import("ESS2csEE.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 2)
+ ess_extra[["ee3"]] <- rio::import("ESS3csEE.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 3)
+ ess_extra[["ee7"]] <- rio::import("ESS7csEE.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 7)
+ ess_extra[["hu1"]] <- rio::import("ESS1csHU.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 1)
+ ess_extra[["hu3"]] <- rio::import("ESS3csHU.por") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 3)
+ ess_extra[["ua2"]] <- rio::import("ESS2csUA.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 2)
+ ess_extra[["ua3"]] <- rio::import("ESS3csUA.spss.zip") %>% select(IDNO, CNTRY, hinc1 = starts_with("HINCT")) %>% mutate(essround = 3)
+ 
+ ess_extra <- plyr::ldply(ess_extra, rbind) %>% select(-`.id`) %>% mutate(extra = 1)
+ names(ess_extra) <- tolower(names(ess_extra))
+ 
+ 
+# ## 1.4. Merging all ESS data -----------
+ 
+ ess <- full_join(ess_merge, ess_extra) %>%
+   recode_missings(.) %>% 
+   sjlabelled::remove_all_labels() %>%
+   mutate_at(vars(one_of(part_vars)), funs(plyr::mapvalues(., from = c(1,2,NA), to = c(1,0,NA)))) %>%
+   mutate(hhinc = ifelse(is.na(hinctnt), hinctnta, hinctnt),
+          hhinc = ifelse(is.na(hhinc), hinc1, hhinc),
+          hhinc = ifelse(hhinc > 20, NA, hhinc),
+          eduyrs = round(replace(eduyrs, eduyrs >= 20, 20)),
+          female = gndr - 1,
+          city = as.numeric(domicil <= 2),
+          employed = ifelse(mnactic == 1, 1, 0),
+          membertu = ifelse(mbtru == 1, 1, 0),
+          city = ifelse(domicil %in% c(1,2), 1, 0),
+          age = agea,
+          year = ifelse(!is.na(inwyr), inwyr, inwyys)) %>% 
+   group_by(essround, cntry) %>%
+   mutate(year = round(mean(year, na.rm = TRUE)),
+          year = ifelse(cntry == "EE" & essround == 5, 2011, year),
+          year0 = year - 2002,
+          cntry_year = paste(cntry, year, sep =)) %>%
+   ungroup()
+ 
+ 
+# ## 1.5. Macro-level data ----------
+ 
+# ### 1.5.1. SWIID -------------------
+ 
+ swiid <- read.csv("https://raw.githubusercontent.com/fsolt/swiid/master/data/swiid7_1_summary.csv",
+                   stringsAsFactors = FALSE, encoding = "UTF-8") %>%
+   mutate(iso2 = countrycode(country, "country.name", "iso2c")) %>%
+   select(iso2, year, gini_disp) %>%
+   filter(iso2 %in% unique(ess$cntry))
+ 
+ 
+ ### 1.5.2. GDP per capita (WORLD BANK) ----------------------
+ 
+ wb <- WDI(country="all", indicator=c("NY.GDP.PCAP.PP.KD"),
+                start = 1998, end = 2017, extra = TRUE, cache = NULL) %>%
+   mutate(iso2 = countrycode(iso3c, "iso3c", "iso2c")) %>%
+   select(iso2, year, wb_gdp_pc = "NY.GDP.PCAP.PP.KD") %>%
+   filter(iso2 %in% unique(ess$cntry))
+ 
+ 
+# ### 1.5.3. Inter-Parliamentary Union -----------------
+ 
+# # Source:
+#https://data.ipu.org/api/comparison.csv?load-entity-refs=taxonomy_term%2Cfield_collection_item&max-depth=2&langcode=en&field=country%3A%3Afield_structure_of_parliament&historical=true
+# https://data.ipu.org/api/comparison.csv?load-entity-refs=taxonomy_term%2Cfield_collection_item&max-depth=2&langcode=en&field=country%3A%3Afield_political_system&historical=true
+
+ipu_bicam <- read.csv("country--field_structure_of_parliament.csv", 
+                 skip = 6, header = TRUE,
+                 stringsAsFactors = FALSE) %>%
+  mutate(year = as.numeric(substr(Date, 1, 4)),
+          iso2 = countrycode(Country, "country.name", "iso2c"),
+          bicameral = ifelse(Structure.of.parliament == "Bicameral", 1, 0)) %>%
+   group_by(iso2) %>%
+   filter(year == max(year), iso2 %in% unique(ess$cntry)) %>%
+   select(iso2, bicameral)
+ 
+ ipu_pres_parl <- read.csv("country--field_political_system.csv", 
+                       skip = 6, header = TRUE,
+                       stringsAsFactors = FALSE) %>%
+   mutate(year = as.numeric(substr(Date, 1, 4)),
+          iso2 = countrycode(Country, "country.name", "iso2c"),
+          parliamentary = ifelse(Political.system == "Parliamentary system", 1, 0)) %>%
+   group_by(iso2) %>%
+   filter(year == max(year), iso2 %in% unique(ess$cntry)) %>%
+   select(iso2, parliamentary)
+ 
+ 
+# ### 1.5.4. Merging country data -------------
+ 
+ new_eu_list <- c("BG", "CY", "CZ", "EE", "HR", "HU", "LT", "LV", "PL", "RO", "RU", "SI", "SK", "TR", "UA")
+ 
+ merge_cntry <- full_join(swiid, wb, by = c("iso2", "year")) %>%
+   full_join(ipu_bicam, by = "iso2") %>%
+   full_join(ipu_pres_parl, by = "iso2") %>%
+   filter(iso2 %in% unique(ess$cntry)) %>%
+   mutate(old_demo = ifelse(iso2 %in% new_eu_list, 0, 1)) %>%
+   group_by(iso2) %>%
+   arrange(iso2, year) %>%
+   mutate(gini_disp = ifelse(iso2 %in% c("IS", "IT", "LT") & year == 2016,
+          lag(gini_disp), gini_disp))
+ 
+ 
+# ### 1.6. Merging ESS and country data ------------------
+ 
+ ess_clean <- ess %>%
+   filter(!(cntry %in% c("AL", "XK", "LV", "RO", "TR", "RU", "IL"))) %>%
+   drop_na(age, female, eduyrs, employed, membertu, city, hhinc, health,
+           pbldmn, sgnptit, bctprd)
+ 
+ ess_cntryvars_table <- ess_clean %>%
+   group_by(cntry, year) %>%
+   tally() %>%
+   mutate(year_lag = year - 1) %>%
+   left_join(merge_cntry, by = c("cntry" = "iso2", "year_lag" = "year")) %>%
+   group_by(cntry) %>%
+   mutate(gini_mean = mean(gini_disp, na.rm = TRUE),
+          gini_diff = gini_disp - gini_mean,
+          ln_gdppc = log(wb_gdp_pc),
+          ln_gdppc_mean = mean(ln_gdppc, na.rm = TRUE),
+          ln_gdppc_diff = ln_gdppc - ln_gdppc_mean) %>%
+   ungroup() %>%
+   mutate(gini_disp_c = gini_disp - mean(gini_disp, na.rm = TRUE),
+          gini_mean_c = gini_mean - mean(gini_mean, na.rm = TRUE)) %>%
+      select(cntry, year, year_lag, gini_disp, gini_disp_c, gini_mean, gini_mean_c, 
+          gini_diff, wb_gdp_pc, ln_gdppc, ln_gdppc_mean, ln_gdppc_diff, 
+                    parliamentary, bicameral, old_demo)
+
+ ## calculating income quintiles
+ 
+ map_to_quintiles <- ess_clean %>%
+   group_by(essround, cntry) %>%
+   mutate(rown = row_number(),
+          essround_cntry = paste(essround, cntry)) %>%
+   ungroup() %>%
+   select(rown, essround_cntry, hhinc) %>%
+   spread(essround_cntry, hhinc) %>%
+   lapply(., function(x) { return(questionr::freq(x)) }) %>%
+   keep(function(x) nrow(x) < 1000) %>%
+   do.call(rbind, .) %>% 
+   tibble::rownames_to_column(var = "varname_value") %>%
+      filter(substr(varname_value, 6, 7) != "NA") %>%
+   mutate(essround = as.numeric(substr(varname_value, 1, 1)),
+          cntry = substr(varname_value, 3, 4),
+          hhinc = as.numeric(gsub("^[^.]*.","",varname_value))) %>%
+   group_by(essround, cntry) %>%
+   mutate(cum_sum = cumsum(`val%`),
+          hhinc_quant = cut(cum_sum, breaks = c(0,20,40,60,80,101), right = TRUE),
+          hhinc_quant = as.numeric(hhinc_quant),
+          hhinc_quant_c = hhinc_quant - 3) %>%
+   select(essround, cntry, hhinc, hhinc_quant, hhinc_quant_c)
+``` 
+ 
+```{r warning=FALSE, results='hide', message=FALSE}
+# ### 1.7. FINAL DATA SET ------------------
+
+ final_data <- ess_clean %>%
+   left_join(map_to_quintiles) %>%
+   left_join(ess_cntryvars_table, by = c("cntry", "year")) %>%
+   drop_na(age, female, eduyrs, employed, membertu, city, hhinc_quant_c,
+           pbldmn, sgnptit, bctprd, health,
+           gini_disp, ln_gdppc, parliamentary, bicameral, old_demo) %>%
+   select(-c(agea, gndr, domicil, mbtru, mnactic,
+             hinctnt, hinctnta, inwyr, inwyys, inwyye, hinc1))
+ 
+
+ 
+  rio::export(final_data, "final_data1.csv.zip")
+  final_data <- rio::import("final_data1.csv.zip")
+```
+
+Research will therefore consider the following question: does social movement literature help to explain the effects of economic inequality on protest participation better than objective measures? For this, a new independent variable will be added into the regression model. Kurer et al. suggest unemployment risk as an indicator of economic hardship because it provides ‘a gradual manifestation of economic hardship’ rather than a ‘snapshot of a respondent’s economic situation’ (874; 2019). However, further research has found that subjective general health may be a better indicator of economic hardship, given that perceived risk of unemployment will vary based on a variety of factors which don’t reflect economic stability. It provides an overview of both long- and short-term economic situation, and is included within the European Social Survey, meaning responses will correlate with respondents. A wide body of literature also supports the relationship between economic situation and health, even when controlling for structural and demographic factors like age or race (Fritzell et al., 2004; Menchik, 2010). 
+
+This will be used as a country-level variable because Kołczynska determined that cross-country differences play a more important role than within country changes in equality. This could be influenced by significant differences in the structure of each country. Furthermore, none of the country-level variables in the original model were statistically significant.
+
+*For the sake of interpretation, 1 = 'Very good', 2 = 'Good' and 3 = 'Fair' in Fig.1 to refer to health standards.*
+
+```{r results='hide'}
+#TRANSFORMING DATA FROM INDEPENDENT TO NATIONAL
+final_data$health <- as.numeric(final_data$health)
+filter(final_data, !health %in% c(7, 8, 9))
+healthtable <- final_data %>%
+   group_by(cntry) %>%
+   summarise_at(vars(health), funs(mean(., na.rm=TRUE)))
+healthtable$health <- round(healthtable$health, digits = 2)
+healthtable <- healthtable %>% 
+  rename(
+    genhealth = health)
+final_data <- merge(final_data, healthtable, by="cntry")
+```
+
+```{r qplot2}
+theme_set(theme_minimal())
+Sum = groupwiseMean(genhealth ~ cntry,
+                    data   = final_data,
+                    conf   = 0.95,
+                    digits = 3)
+qplot(data = Sum, x = cntry, y = Mean, main = "Figure 1. Mean Health by Country", 
+      xlab = "Country", ylab = "Mean Health") +
+      geom_errorbar(aes(ymin = Trad.lower,
+                  ymax = Trad.upper,
+                  width = 0.15)) 
+```
+
+As previously mentioned, boycotts of products will also be included under the dependent variable. 17.35% of people had engaged in this at some point, lower than petitions (22%) but higher than demonstrations (7%). 
+
+
+
+### 2.2. Method
+
+The model uses a three-tier nested structure, with individuals nested in country-years nested in countries. The model is logistic, so the dependent variable, protest participation (demonstrations, petitions and now boycotts), indicates either 1 = ‘have protested’, or 0 = ‘have not protested’. Much like in the original model, differentiating between income inequality within and cross countries is done by taking the mean income inequality (using the Gini coefficient) per country – time invariant – and then calculating the deviance from this mean year on year – time varying. This interaction is then controlled for using the same variables as in the original paper (age, employment, education, trade union membership, living in a city, income, GDP per capita, old/new democracy, bicameral parliament, parliamentary system) plus the new variable. 
+A group mean per country of genhealth will be found. This should present a picture of the economic situation of each country. Genhealth response will be converted to a numeric scale, 1 = very good, 5 = very bad.
+
+
+## 3. Results
+
+```{r warning=FALSE}
+#INCLUDING BOYCOTTS
+demo11 <- glmer(pbldmn ~ age + I(age^2) + female + eduyrs + employed + membertu + city + hhinc_quant_c +
+                  gini_mean_c*hhinc_quant_c + gini_diff*hhinc_quant_c + 
+                  ln_gdppc + old_demo + bicameral + parliamentary + year0 +
+                  (gini_diff + year0 || cntry) + (hhinc_quant_c || cntry_year),
+                family=binomial,
+                control = glmerControl(optimizer = "bobyqa"),
+                nAGQ = 0,
+                weights = pspwght,
+                data = final_data)
+ petition11 <- update(demo11, sgnptit ~ . )
+ boycott <- update(demo11, bctprd ~ . )
+```
+
+```{r warning=FALSE}
+#INCLUDING GENHEALTH
+demo13 <- glmer(pbldmn ~ age + I(age^2) + female + eduyrs + employed + membertu + city +
+                   hhinc_quant_c +
+                  gini_mean_c*hhinc_quant_c + gini_diff*hhinc_quant_c + 
+                  ln_gdppc + old_demo + bicameral + parliamentary + year0 + 
+                   genhealth +
+                  (gini_diff + year0 || cntry) + (hhinc_quant_c || cntry_year),
+                family=binomial,
+                control = glmerControl(optimizer = "bobyqa"),
+                nAGQ = 0,
+                weights = pspwght,
+                data = final_data)
+petition13 <- update(demo13, sgnptit ~ . )
+boycott13 <- update(demo13, bctprd ~ . )
+```
+
+
+```{r}
+demo13_mean_pred <- ggpredict(demo13, type = "fe", terms = c("gini_mean_c [all]", "hhinc_quant_c [-2,0,2]")) %>% mutate(model = "demonstrations", effect = "Income inequality: time-invariant component")
+petition13_mean_pred <- ggpredict(petition13, type = "fe", terms = c("gini_mean_c [all]", "hhinc_quant_c [-2,0,2]")) %>% mutate(model = "petitions", effect = "Income inequality: time-invariant component")
+boycott13_mean_pred <- ggpredict(boycott13, type = "fe", terms = c("gini_mean_c [all]", "hhinc_quant_c [-2,0,2]")) %>% mutate(model = "boycotts", effect = "Income inequality: time-invariant component")
+
+demo13_diff_pred <- ggpredict(demo13, type = "fe", terms = c("gini_diff [all]", "hhinc_quant_c [-2,0,2]")) %>% mutate(model = "demonstrations", effect = "Income inequality: time-varying component")
+petition13_diff_pred <- ggpredict(petition13, type = "fe", terms = c("gini_diff [all]", "hhinc_quant_c [-2,0,2]")) %>% mutate(model = "petitions", effect = "Income inequality: time-varying component")
+boycott13_diff_pred <- ggpredict(boycott13, type = "fe", terms = c("gini_diff [all]", "hhinc_quant_c [-2,0,2]")) %>% mutate(model = "boycotts", effect = "Income inequality: time-varying component")
+
+models13_pred <- bind_rows(demo13_mean_pred, petition13_mean_pred, boycott13_mean_pred,
+                           demo13_diff_pred, petition13_diff_pred, boycott13_diff_pred) %>%
+  mutate(x_unc = ifelse(effect == "Income inequality: time-invariant component", x + 28.62597, x),
+         model = factor(model, levels=c("demonstrations", "petitions", "boycotts")),
+         effect = factor(effect, levels=c("Income inequality: time-invariant component", 
+                                          "Income inequality: time-varying component")))
+
+ggplot(models13_pred, aes(x = x_unc, y = predicted, group = group, fill = group)) +
+  geom_line(aes(col = group), size = 1) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.1) +
+  theme_bw(12) + 
+  xlab("Income inequality") +
+  ylab("Predicted probability of participation") +ggtitle("Figure.2")+
+  expand_limits(y = 0) +
+  facet_grid(model ~ effect, scales = "free") +
+  theme(plot.title = element_text(size=12),
+        legend.position = "bottom") +
+  scale_colour_discrete(name="Income quintile",
+                    breaks=c(-2,0,2),
+                    labels=c("lowest", "medium", "highest")) +
+  scale_fill_discrete(name="Income quintile",
+                  breaks=c(-2,0,2),
+                  labels=c("lowest", "medium", "highest"))
+
+```
+ 
+## *Boycotts*
+Results are presented in Fig.2 above, distinguishing effects of time varying (within country) changes and time invariant (cross-country) differences in economic inequality against different forms of protest. The implementation of boycotts revealed remarkably similar results to petitions. Model estimates in Table.1 demonstrate that effects of inequality on protest are again the result of cross-national differences, rather than within country changes, given that the estimates are only significant under time-invariant conditions. The graph follows a similar pattern to Fig.1 in the original paper, in which as inequality increases, protest participation tends to decrease. Participation drops more significantly amongst the lowest income groups, from 0.23 to 0.08, but also drops among the wealthiest too, from 0.23 to 0.15. This supports relative power theory (Goodin and Dryzek, 1980), which may suggest that as inequality increases, the wealthy use their political power to suppress and discourage protest, seeing a decline in all groups but particularly the poorest. However, the lack of statistically significant results in association with longitudinal data (time varying) means this is far from conclusive, and not applicable to within country protest. 
+
+```{r}
+tab_model(demo11, demo13, petition11, petition13, boycott, boycott13,
+          pred.labels = c("Intercept", "Age", "Age Squared", "Female", 
+                          "Education Years", "Employed", "Trade Union Member",
+                          "City", "Household Income Quantile", "Income Inequality: Time Invariant",
+                          "Income Inequality: Time Varying", "GDP per Capita", 
+                          "Old Democracy", "Bicameral", "Parliamentary System", 
+                          "Year", "Income Inequality: Time Invariant x Household Income",
+                          "Income Inequality: Time Varying x Household Income", 
+                          "General Health"),
+          dv.labels = c("Demonstrations","Demonstrations w/ genhealth",
+                        "Petitions", "Petitions w/ genhealth",
+                        "Boycotts","Boycotts w/ genhealth"),
+          show.est = TRUE, show.ci = FALSE, show.re.var = FALSE, emph.p = TRUE, p.style = "stars",
+          title = "Table.1")
+```
+
+## *Genhealth*
+As seen in Table.1, the odds ratio of genhealth indicates that the worse health a country has, the less likely they are to participate in boycotts. In fact, with each increase in poor health, the likelihood of boycotting decreases by 68%. This is perhaps unsurprising; worse health is associated with poorer economic standards, meaning individuals may not be able to afford to boycott certain products because alternatives may be too costly. This points more towards resource theory, suggesting only the wealthier can afford to participate in protest. A real-world example of this are members of social activist group Extinction Rebellion, whose members are predominantly made up of the white middle class, despite the fact worsening environmental conditions are affecting the poorest the most (La Frenais, 2019).
+Poorer health supposedly increases demonstration activity, but both demonstrations and petitions were statistically insignificant. 
+
+The new model has a marginally better AIC score than the original, meaning it is a better fit of the data. A variance inflation factor test also indicated little to no multicollinearity between the new and existing variables. 
+
+
+## 4. Conclusion
+
+This replication looked at the implementation of a variable from the social movement literature, with the aim of explaining further the link between economic inequality and protest participation. It also included an expansion on the definition of ‘protest’, adding results from those who had boycotted products over the last 12 months. 
+Results from this replication provided similar findings to the original study; although there was evidence of participation being affected by inequality across countries, the data failed to provide any information on longitudinal effects of inequality. The failure to find this evidence led to the conclusion that Vassallo’s (2018) hypothesis that changes in economic inequality has no effect on protest participation is most accurate. This is not to say that the other theories are invalid, they do help to explain cross-national differences in protest participation, but simply that the data from 2001-2016 fails to support them. 
+
+Kołczyńska’s explanation that this may be because of relatively slow economic change in Europe is likely accurate. Data from the IMF (2016) proves that the only continent with lower economic growth than the EU is Latin America. In order to visualise whether theories of economic change and protest participation are true, research needs to be done in an area of rapid economic development. This would likely be in the emerging/developing Asia market, although it should be noted that protest activity could be suppressed in countries like China. Alternatively, researchers could investigate the relationship over a longer period, particularly pre-1970’s to see a larger effect of economic progression, although obviously research would be limited by data availability.
+
+The evidence additionally suggests that more research should be done investigating social movement literature and the relationship of economic inequality and protest participation. While subjective health failed to prove any association between these two, there was a statistically significant relationship with boycotts, and the inclusion of more subjective variables could help explain more.  
+
+
+## References
+
+Drewett, M., (2006) *The Cultural Boycott against Apartheid South Africa: A Case of Defensible Censorship?* Routledge. 
+
+European Social Survey (ESS). 2018. *European Social Survey Cumulative File, ESS 1–8 (2018).* Data FileEdition 1.0. NSD—Norwegian Centre for Research Data, Norway—Data Archive and Distributor of ESSData for ESS ERIC. Available at https://doi.org/10.21338/NSD-ESS-CUMULATIVE
+
+Freese, J., & Peterson, D. (2017). *Replication in social science.* Annual Review of Sociology, 43, 147-165, [doi: 10.1146](https://www.annualreviews.org/doi/abs/10.1146/annurev-soc-060116-053450).  
+
+ Fritzell, J., Nermo, M., Lundberg, O., (2004) *The Impact of Income: Assessing the Relationship Between Income and Health in Sweden.* Scandinavian Journal of Public Health. doi:10.1080/14034950310003971  
+
+Goodin, R., and Dryzek, J. (1980). *Rational Participation: The Politics of Relative Power.* British Journal of Political Science.
+
+Gurr, T., (1970). *Why Men Rebel. Princeton*, NJ: Princeton University Press.
+
+International Monetary Fund (2016) *World Economic Outlook: Too Slow for Too Long*. Imf.org: https://www.imf.org/external/pubs/ft/weo/2016/01/ 
+
+Kołczyńska, M. (2020), *Changes or Cross‐National Differences? Effects of Economic Inequality on Protest Participation*. Social Science Quarterly, 101: 256-268. https://doi.org/10.1111/ssqu.12731
+
+Kurer, T., Hausermann, S., Wuest, B. and Enggist, M. (2019) *Economic Grievances and Political Protest.* European Journal of Political Research, 58: 866-892. https://doi.org/10.1111/1475-6765.12318
+
+La Frenais, R., (2019) *Extinction Rebellion.* Art Monthly. London, 427: 44. https://www.proquest.com/openview/afd7375015557d8c8b76e87c03ef7d62/1?pq-origsite=gscholar&cbl=106011 
+
+Menchik, P., (2010) *Economic Status as a Determinant of Mortality Among Black and White Older Men: Does Poverty Kill?* A Journal of Demography: https://www.tandfonline.com/doi/abs/10.1080/0032472031000147226?casa_token=BOAyi5nR0doAAAAA%3AhDZ0pQMyOeRVHefS15d-uMIfmM2aWpWz_fk38tul98eYIkJfKje5WAMSscm3_YewIztcCAroQl41fw& 
+
+Powell, G.B. 1982. *Contemporary Democracies*. Cambridge, MA: Harvard University Press.
+
+Schoene, M., and Allaway, I. (2019). *Income Inequality and European Protest Activity.* Michigan Sociological Review, 33, 76-97. https://www.jstor.org/stable/26868252 
+
+Solt, F. (2015) *Economic Inequality and Nonviolent Protest*. Social Science Quarterly, 96: 1314-1327. https://doi.org/10.1111/ssqu.12198
+
+
+Vassallo, F., (2018) *The Evolution of Protest Research: Measures and Approaches.* PS Political Science and Politics.
+
+Vassallo, F., (2019) *After the Crisis; Political Protest in the Aftermath of the Economic Recession.* Comparative European Politics. https://link.springer.com/article/10.1057/s41295-019-00156-7 
+
+
+Verba, S., K. Schlozman, and H. Brady. (1995). *Voice and Equality: Civic Voluntarism in American Politics.* Cambridge, MA: Harvard University Press.
+
+
+## Appendix
+
+
+Calculating proportion who engaged in boycotts:
+```{r}
+table(final_data$bctprd)
+```
+```{r}
+45957/(218936+45957)*100
+```
+17.35% engaged in boycotts
+
+
+Variance Inflation Factor test:
+```{r}
+vif(demo13)
+```
+No major evidence of multicollinearity.
+
